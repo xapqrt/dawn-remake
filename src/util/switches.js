@@ -55,19 +55,29 @@ function applySwitches(settings) {
     "--min_semi_space_size=128"
   );
 
-  // Suppress device-discovery multicast noise on the local network
+  // ─── Network: targeted noise suppression, WebSocket-safe ─────────────────────
+  // REMOVED: --disable-background-networking — this flag kills Chromium's TCP/WS
+  //   keep-alive infrastructure and causes WebSocket connections to go cold,
+  //   producing exactly the 80-160ms periodic ping spikes the user reported.
+  // REMOVED: --disable-domain-reliability — this also interferes with connection
+  //   monitoring and makes WS reconnects slower.
+  //
+  // Instead, only suppress things that are truly noise:
+  // Suppress mDNS/SSDP device-discovery multicast noise
   app.commandLine.appendSwitch("disable-device-discovery-notifications");
-  // Disables all background network queries (updates, telemetry, etc.) to eliminate ping spikes
-  app.commandLine.appendSwitch("disable-background-networking");
+  // Kill phishing detection (fetches URLs in the background, causes network jitter)
   app.commandLine.appendSwitch("disable-client-side-phishing-detection");
+  // Kill Chromium auto-update checks (background fetches)
   app.commandLine.appendSwitch("disable-component-update");
   app.commandLine.appendSwitch("disable-default-apps");
-  app.commandLine.appendSwitch("disable-domain-reliability");
+  // Kill sync (background network traffic)
   app.commandLine.appendSwitch("disable-sync");
   app.commandLine.appendSwitch("no-first-run");
   app.commandLine.appendSwitch("no-default-browser-check");
+  // Async DNS resolver: resolves hostnames off the main thread (prevents DNS stall spikes)
+  app.commandLine.appendSwitch("enable-async-dns");
 
-  // ─── Low-Latency WebGL & Graphics Compositing optimizations ─────────────────
+  // ─── Low-Latency WebGL & Graphics Compositing ────────────────────────────────
   app.commandLine.appendSwitch("enable-webgl-image-chromium");
   app.commandLine.appendSwitch("enable-drdc");
   app.commandLine.appendSwitch("enable-hardware-overlays");
@@ -90,6 +100,8 @@ function applySwitches(settings) {
     "SkiaGraphite",
     // Hardware video decode (cuts CPU usage during video playback/cutscenes)
     "VaapiVideoDecoder",
+    // WebSocket over HTTP/3 QUIC — lower RTT on modern routers (Chrome 116+)
+    "WebSocketOverHttp3",
   ];
 
   const disableFeatures = [
@@ -99,9 +111,12 @@ function applySwitches(settings) {
     // Unnecessary UI features — saves renderer init time
     "ChromeWhatsNewUI",
     "IPHSidePanelGenericMenuFeature",
-    // Disables background Safe Browsing URL lookups and fetches to prevent network jitter
+    // Safe Browsing does background URL fetches that cause network jitter in-game
     "SafeBrowsing",
+    // BackgroundFetch API — can trigger background downloads during gameplay
     "BackgroundFetch",
+    // Speculative prerendering — wastes bandwidth on pages we didn't navigate to
+    "Prerender2",
   ];
 
   // On non-macOS platforms, disable Metal/Graphite (not available there)

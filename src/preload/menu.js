@@ -1273,10 +1273,10 @@ class Menu {
 
         if (proxyLatencyResults) {
           proxyLatencyResults.style.display = "block";
-          proxyLatencyResults.innerText = "Probing all proxies...";
+          proxyLatencyResults.innerText = "Probing HTTP reach of all proxies...";
         }
 
-        // Ping all proxies in parallel
+        // Probe all proxies in parallel (HTTP HEAD — connection latency, not game ping)
         const results = await Promise.all(
           PROXY_URLS.map(async (url) => {
             const controller = new AbortController();
@@ -1295,43 +1295,48 @@ class Menu {
 
         results.sort((a, b) => a.latency - b.latency);
 
-        // Display results
+        // Display results (colour-coded: green < 80ms, yellow < 200ms, red otherwise)
         if (proxyLatencyResults) {
           proxyLatencyResults.innerHTML = results.map((r, i) => {
             const label = r.url.replace("https://", "").replace("/", "");
             const ping = r.latency === Infinity ? "UNREACHABLE" : `${r.latency}ms`;
-            const color = r.latency === Infinity ? "#e24f4f" : (r.latency < 100 ? "#4dbf4d" : (r.latency < 250 ? "#ffb914" : "#e24f4f"));
+            const color = r.latency === Infinity ? "#e24f4f" : (r.latency < 80 ? "#4dbf4d" : (r.latency < 200 ? "#ffb914" : "#e24f4f"));
             const star = i === 0 && r.latency !== Infinity ? " ⭐" : "";
             return `<span style="color:${color}; margin-right:8px;">${label}: ${ping}${star}</span>`;
-          }).join("");
+          }).join("<br>");
         }
 
-        // Apply best
+        // Find best reachable proxy
         const best = results.find(r => r.latency !== Infinity);
+        const currentUrl = window.location.href.split("/").slice(0, 3).join("/") + "/";
+
         if (best) {
-          this.settings.base_url = best.url;
-          ipcRenderer.send("update-setting", "base_url", best.url);
-
-          // Update the dropdown in the menu
-          const baseUrlSelect = this.menu.querySelector("#base_url");
-          if (baseUrlSelect) baseUrlSelect.value = best.url;
-
-          // Invalidate proxy cache so next auto-run re-probes
-          localStorage.removeItem("dawn-proxy-best-url");
-          localStorage.removeItem("dawn-proxy-best-url-time");
-
-          btnText.innerText = `✅ Selected: ${best.url.replace("https://", "").replace("/", "")} (${best.latency}ms)`;
+          btnText.innerText = `✅ Best: ${best.url.replace("https://", "").replace("/", "")} (${best.latency}ms)`;
           autoSelectProxyBtn.style.opacity = "1";
 
-          // Offer to reload
+          // Only offer to switch if the best is different from current AND significantly better
+          const currentResult = results.find(r => currentUrl.startsWith(r.url.replace(/\/$/, "")));
+          const currentLatency = currentResult ? currentResult.latency : Infinity;
+          const switchThreshold = 50; // only suggest if best is 50ms+ better
+
           setTimeout(() => {
-            if (window.location.href !== best.url) {
-              const doReload = confirm(`Dawn Client: Switching to ${best.url.replace("https://", "").replace("/", "")} (${best.latency}ms ping). Reload now?`);
-              if (doReload) window.location.href = best.url;
+            if (best.url !== currentUrl && (currentLatency - best.latency > switchThreshold || currentLatency === Infinity)) {
+              const doReload = confirm(
+                `Dawn Client: ${best.url.replace("https://", "").replace("/", "")} responds ${Math.abs(currentLatency - best.latency)}ms faster.\n` +
+                `Note: kirka.io is always recommended for the best in-game ping.\n` +
+                `Switch now?`
+              );
+              if (doReload) {
+                this.settings.base_url = best.url;
+                ipcRenderer.send("update-setting", "base_url", best.url);
+                const baseUrlSelect = this.menu.querySelector("#base_url");
+                if (baseUrlSelect) baseUrlSelect.value = best.url;
+                window.location.href = best.url;
+              }
             }
             btnText.innerText = originalText;
             delete autoSelectProxyBtn.dataset.testing;
-          }, 2000);
+          }, 2500);
         } else {
           btnText.innerText = "❌ All proxies unreachable";
           autoSelectProxyBtn.style.opacity = "1";
@@ -1343,6 +1348,8 @@ class Menu {
       });
     }
   }
+
+
 
 
   createModal(title, description) {
