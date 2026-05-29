@@ -374,15 +374,23 @@
       <div class="option-group">
         <div class="option" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
           <div class="left">
-            <span style="font-weight: bold; color: #ffb914;"><i class="fab fa-apple" style="margin-right: 5px;"></i> macOS Wi-Fi Ping Spikes Fix (AWDL)</span>
-            <span class="description" style="line-height: 1.4; margin-top: 0.5rem; display: block;">
-              macOS dynamically scans Wi-Fi frequencies for AirDrop/AirPlay (AWDL), causing game ping to spike from 30ms to 200ms+ every few minutes.
+            <span style="font-weight: bold; color: #ffb914;"><i class="fab fa-apple" style="margin-right: 5px;"></i> macOS Latency & Flat-Line Ping Guide</span>
+            <span class="description" style="line-height: 1.5; margin-top: 0.5rem; display: block; color: rgba(255,255,255,0.75);">
+              If you are experiencing periodic ping spikes (e.g., jumping from 30ms to 200ms every few minutes), apply these 3 fixes:
               <br><br>
-              To fix this, open your Mac's <b>Terminal</b> and run:<br>
-              <code style="background: rgba(0,0,0,0.4); padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; display: inline-block; margin-top: 0.25rem; color: #fff;">sudo ifconfig awdl0 down</code>
+              <b>1. Disable AirDrop/AWDL Scanning (Most Common Fix)</b><br>
+              macOS dynamically scans Wi-Fi channels for AirDrop/Handoff (AWDL), interrupting your connection. Open your Mac <b>Terminal</b> and run:<br>
+              <code style="background: rgba(0,0,0,0.4); padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; display: inline-block; margin-top: 0.25rem; color: #fff; border: 1px solid rgba(255,255,255,0.1);">sudo ifconfig awdl0 down</code><br>
+              To re-enable AirDrop after playing, run:<br>
+              <code style="background: rgba(0,0,0,0.4); padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; display: inline-block; margin-top: 0.25rem; color: #fff; border: 1px solid rgba(255,255,255,0.1);">sudo ifconfig awdl0 up</code>
               <br><br>
-              To restore AirDrop/AirPlay back after playing, run:<br>
-              <code style="background: rgba(0,0,0,0.4); padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; display: inline-block; margin-top: 0.25rem; color: #fff;">sudo ifconfig awdl0 up</code>
+              <b>2. Turn Off Location Wi-Fi Scanning</b><br>
+              The system location daemon scans Wi-Fi access points to triangulate location. Go to:<br>
+              <span style="color: #ffb914;">System Settings > Privacy & Security > Location Services > System Services (Details...)</span><br>
+              And toggle <b>Networking & Wireless</b> (or "Wi-Fi Networking") to <b>OFF</b>.
+              <br><br>
+              <b>3. Avoid DFS Router Channels</b><br>
+              If your Wi-Fi router uses DFS (Dynamic Frequency Selection) channels (channels 52–140), macOS will periodically pause all data transfer to listen for military radar. Access your router settings and lock your 5GHz band to a <b>non-DFS channel</b> (like <b>36, 44, or 149</b>).
             </span>
           </div>
         </div>

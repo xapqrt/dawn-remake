@@ -47,6 +47,32 @@ All base features you love are still fully supported:
 
 ---
 
+## 🌐 Fixing macOS Wi-Fi Ping Spikes
+
+If you play on Wi-Fi and experience periodic ping spikes (e.g. your latency jumps to 200ms+ every few minutes), this is caused by macOS background scanning processes. Apply these three fixes to achieve flat-line ping:
+
+### 1. Disable AirDrop/AWDL scanning (Highly Recommended)
+macOS uses Apple Wireless Direct Link (AWDL) to scan for nearby Apple devices. This scanning process splits your Wi-Fi antenna's focus and spikes gaming ping.
+- **To disable AWDL during gaming:** Open Terminal and run:
+  ```bash
+  sudo ifconfig awdl0 down
+  ```
+- **To enable AirDrop back after playing:** Open Terminal and run:
+  ```bash
+  sudo ifconfig awdl0 up
+  ```
+
+### 2. Disable Location Wi-Fi Scanning
+The system location daemon (`locationd`) scans local access points to triangulate your Mac's position.
+1. Open **System Settings > Privacy & Security > Location Services**.
+2. Click **System Services (Details...)** at the bottom.
+3. Toggle **Networking & Wireless** (or "Wi-Fi Networking") to **OFF**.
+
+### 3. Change Router to a non-DFS Channel
+If your 5GHz network is configured to use DFS (Dynamic Frequency Selection) channels (channels 52–140), macOS will periodically pause networking to listen for radar interference. Log into your router settings and manually set your 5GHz channel to a **non-DFS channel** (e.g., **36, 44, or 149**).
+
+---
+
 ## 🛠️ Build and Install
 
 ### Prerequisites
