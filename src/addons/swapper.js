@@ -47,28 +47,36 @@ const initResourceSwapper = () => {
   ];
 
   const allFilesSync = (dir) => {
-    fs.readdirSync(dir).forEach((file) => {
-      const filePath = path.join(dir, file);
-      if (fs.statSync(filePath).isDirectory()) allFilesSync(filePath);
-      else {
-        const useAssets = folder_regex.test(filePath);
-        if (!useAssets || filePath.toLowerCase().endsWith(".glb")) return;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const filePath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          allFilesSync(filePath);
+        } else {
+          const useAssets = folder_regex.test(filePath);
+          if (!useAssets || filePath.toLowerCase().endsWith(".glb")) continue;
 
-        proxyUrls.forEach((proxy) => {
-          const kirk = `*://${proxy}${filePath.replace(SWAP_FOLDER, "").replace(/\\/g, "/")}*`;
-          const origfilterurl = kirk.match(/\/[^\/]+\.(?:[a-zA-Z0-9]+)\*/gi)[0];
-          let filterurl = origfilterurl.replace(/\_/g, "");
-          filterurl = filterurl.replace("/", "/*");
-          filterurl = filterurl.replace(".", "*.*");
-          swap.filter.urls.push(kirk.replace(origfilterurl, filterurl));
-          swap.files[kirk.replace(/\*|_/g, "")] = url.format({
-            pathname: filePath,
-            protocol: "",
-            slashes: false,
+          proxyUrls.forEach((proxy) => {
+            const kirk = `*://${proxy}${filePath.replace(SWAP_FOLDER, "").replace(/\\/g, "/")}*`;
+            const matchResult = kirk.match(/\/[^\/]+\.(?:[a-zA-Z0-9]+)\*/gi);
+            if (!matchResult) return;
+            const origfilterurl = matchResult[0];
+            let filterurl = origfilterurl.replace(/\_/g, "");
+            filterurl = filterurl.replace("/", "/*");
+            filterurl = filterurl.replace(".", "*.*");
+            swap.filter.urls.push(kirk.replace(origfilterurl, filterurl));
+            swap.files[kirk.replace(/\*|_/g, "")] = url.format({
+              pathname: filePath,
+              protocol: "",
+              slashes: false,
+            });
           });
-        });
+        }
       }
-    });
+    } catch (e) {
+      console.error("[DawnClient Swapper] Dir scan error:", e);
+    }
   };
 
   allFilesSync(SWAP_FOLDER);

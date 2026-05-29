@@ -19,6 +19,12 @@ function applySwitches(settings) {
   app.commandLine.appendSwitch("disable-software-rasterizer");
   app.commandLine.appendSwitch("enable-webgl-draft-extensions");
   app.commandLine.appendSwitch("gpu-no-context-lost");
+  // Force lowest possible GPU latency: bypass GPU process sandboxing (lower IPC overhead)
+  app.commandLine.appendSwitch("disable-gpu-sandbox");
+  // Disable GPU watchdog thread to prevent recurring polling micro-stutters
+  app.commandLine.appendSwitch("disable-gpu-watchdog");
+  // Set MSAA sample count to 0 for GPU rasterization to optimize WebGL canvas drawing speed
+  app.commandLine.appendSwitch("gpu-rasterization-msaa-sample-count", "0");
 
   // ─── Apple Silicon / Metal-specific optimisations ─────────────────────────────
   if (process.platform === "darwin") {

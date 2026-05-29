@@ -97,12 +97,19 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
       channel.port2.postMessage(null);
     }
 
+    function getFrameCap() {
+      if (settings.unlimited_fps === false) return 60;
+      const isMatch = win.location.pathname.startsWith("/games/") || win.location.pathname.startsWith("/hub/ranked");
+      if (isMatch) {
+        return Math.max(1, parseInt(settings.fps_cap, 10) || 370);
+      }
+      return 60; // Lobby/Menu capped at 60 FPS to prevent layout thrashing
+    }
+
     function tick() {
       isLoopActive = false;
 
-      const cap = settings.unlimited_fps !== false
-        ? Math.max(1, parseInt(settings.fps_cap, 10) || 370)
-        : 60;
+      const cap = getFrameCap();
       const intervalMs = 1000 / cap;
 
       const now = performance.now();
@@ -152,9 +159,7 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
 
       isLoopActive = true;
 
-      const cap = settings.unlimited_fps !== false
-        ? Math.max(1, parseInt(settings.fps_cap, 10) || 370)
-        : 60;
+      const cap = getFrameCap();
       const intervalMs = 1000 / cap;
 
       const now = performance.now();
