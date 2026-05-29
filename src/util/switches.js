@@ -49,7 +49,7 @@ function applySwitches(settings) {
     "--min_semi_space_size=128"
   );
 
-  // ─── Network: low-latency, no proxy overhead ──────────────────────────────────
+  // ─── Network: low-latency, no proxy overhead, no background noise ────────────
   // no-proxy-server: skip WPAD/PAC proxy lookups → saves ~20-150 ms on WS connect
   app.commandLine.appendSwitch("no-proxy-server");
   // Async DNS: resolve hostnames off the main thread (prevents DNS stall spikes)
@@ -58,6 +58,20 @@ function applySwitches(settings) {
   app.commandLine.appendSwitch("enable-tcp-fastopen");
   // Suppress device-discovery multicast noise on the local network
   app.commandLine.appendSwitch("disable-device-discovery-notifications");
+  // Disables all background network queries (updates, telemetry, etc.) to eliminate ping spikes
+  app.commandLine.appendSwitch("disable-background-networking");
+  app.commandLine.appendSwitch("disable-client-side-phishing-detection");
+  app.commandLine.appendSwitch("disable-component-update");
+  app.commandLine.appendSwitch("disable-default-apps");
+  app.commandLine.appendSwitch("disable-domain-reliability");
+  app.commandLine.appendSwitch("disable-sync");
+  app.commandLine.appendSwitch("no-first-run");
+  app.commandLine.appendSwitch("no-default-browser-check");
+
+  // ─── Low-Latency WebGL & Graphics Compositing optimizations ─────────────────
+  app.commandLine.appendSwitch("enable-webgl-image-chromium");
+  app.commandLine.appendSwitch("enable-drdc");
+  app.commandLine.appendSwitch("enable-hardware-overlays");
 
   // ─── Feature flags (SINGLE call each — Chromium ignores all but the last) ─────
   const enableFeatures = [
@@ -82,6 +96,9 @@ function applySwitches(settings) {
     // Unnecessary UI features — saves renderer init time
     "ChromeWhatsNewUI",
     "IPHSidePanelGenericMenuFeature",
+    // Disables background Safe Browsing URL lookups and fetches to prevent network jitter
+    "SafeBrowsing",
+    "BackgroundFetch",
   ];
 
   // On non-macOS platforms, disable Metal/Graphite (not available there)

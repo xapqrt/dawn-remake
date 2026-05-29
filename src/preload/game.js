@@ -50,6 +50,20 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
     if (win._dawnLimited) return;
     win._dawnLimited = true;
 
+    // Intercept WebGL context creation to force desynchronized (low-latency) rendering
+    // and high-performance GPU preference.
+    try {
+      const origGetContext = win.HTMLCanvasElement.prototype.getContext;
+      win.HTMLCanvasElement.prototype.getContext = function (type, attributes) {
+        if (type === "webgl" || type === "webgl2" || type === "experimental-webgl") {
+          attributes = attributes || {};
+          attributes.desynchronized = true;
+          attributes.powerPreference = "high-performance";
+        }
+        return origGetContext.call(this, type, attributes);
+      };
+    } catch (_) { /* non-fatal */ }
+
     const _raf  = win.requestAnimationFrame.bind(win);
     const _caf  = win.cancelAnimationFrame.bind(win);
 
@@ -65,9 +79,6 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
     let isLoopActive = false;
     let inTick = false;
     let lastFrameTime = performance.now();
-
-    let frameCount = 0;
-    let lastFpsLog = performance.now();
 
     // High-performance MessageChannel for sub-millisecond, non-clamped event loop yielding
     const channel = new MessageChannel();
@@ -108,14 +119,6 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
 
         const currentQueue = pendingQueue;
         pendingQueue = [];
-
-        // Count frames for debug logs
-        frameCount++;
-        if (now - lastFpsLog >= 1000) {
-          console.log(`[DawnClient Limiter] Path: ${win.location.pathname}, Cap: ${cap}, Fired FPS: ${frameCount}, Active callbacks: ${callbacks.size}`);
-          frameCount = 0;
-          lastFpsLog = now;
-        }
 
         // Run all queued callbacks in one master batch
         inTick = true;

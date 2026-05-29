@@ -334,6 +334,7 @@ const createWindow = () => {
       sandbox: false,
       webSecurity: false,
       backgroundThrottling: false,
+      powerPreference: "high-performance",
       preload: path.join(__dirname, "../preload/game.js"),
     },
   });
