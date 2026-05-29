@@ -2,11 +2,47 @@
 
 const customReqScripts = (settings) => {
   const originalXHR = window.XMLHttpRequest;
+  const originalFetch = window.fetch;
   const { base_url, custom_list_price, market_names } = settings;
   let ids = [];
   let newprice;
   let updating = false;
+  const profileCache = new Map();
 
+  // Intercept fetch responses to capture market seller IDs
+  window.fetch = async function (input, init) {
+    const url = typeof input === "string" ? input : input.url;
+    const response = await originalFetch.apply(this, arguments);
+    if (url && (url.includes("/api/market") || url.includes("market"))) {
+      try {
+        const clone = response.clone();
+        const data = await clone.json();
+        console.log("[DawnClient] Intercepted fetch market response:", data);
+        let marketItems = [];
+        if (Array.isArray(data)) {
+          marketItems = data;
+        } else if (data && typeof data === "object") {
+          marketItems = data.data || data.items || data.list || [];
+        }
+        if (Array.isArray(marketItems) && marketItems.length > 0) {
+          ids = marketItems.map(
+            (item) =>
+              item.userId ||
+              item.sellerId ||
+              item.user?.id ||
+              item.seller?.id ||
+              ""
+          );
+          console.log("[DawnClient] Extracted market seller IDs (fetch):", ids);
+        }
+      } catch (e) {
+        console.error("[DawnClient] Error intercepting fetch market response:", e);
+      }
+    }
+    return response;
+  };
+
+  // Intercept XHR responses to capture market seller IDs
   window.XMLHttpRequest = function () {
     const xhr = new originalXHR();
     let requestUrl = "";
@@ -16,9 +52,39 @@ const customReqScripts = (settings) => {
       originalXHR.prototype.open.apply(this, [method, url, ...args]);
     };
 
+    xhr.addEventListener("readystatechange", function () {
+      if (xhr.readyState === 4 && xhr.status === 200) {
+        if (requestUrl && (requestUrl.includes("/api/market") || requestUrl.includes("market"))) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            console.log("[DawnClient] Intercepted XHR market response:", data);
+            let marketItems = [];
+            if (Array.isArray(data)) {
+              marketItems = data;
+            } else if (data && typeof data === "object") {
+              marketItems = data.data || data.items || data.list || [];
+            }
+            if (Array.isArray(marketItems) && marketItems.length > 0) {
+              ids = marketItems.map(
+                (item) =>
+                  item.userId ||
+                  item.sellerId ||
+                  item.user?.id ||
+                  item.seller?.id ||
+                  ""
+              );
+              console.log("[DawnClient] Extracted market seller IDs (XHR):", ids);
+            }
+          } catch (e) {
+            console.error("[DawnClient] Error intercepting XHR market response:", e);
+          }
+        }
+      }
+    });
 
     xhr.send = function (data) {
       if (
+        requestUrl &&
         requestUrl.includes(`api2.${base_url.replace("https://", "")}`) &&
         location.href === `${base_url}inventory` &&
         document.querySelector(".vm--container > .vm--modal > .wrapper-modal")?.id !== "sell-item-modal" &&
@@ -45,16 +111,31 @@ const customReqScripts = (settings) => {
   };
 
   async function marketUsers() {
-    const itemElements = document.getElementsByClassName("item-name");
+    const itemElements = Array.from(document.getElementsByClassName("item-name"));
+    if (itemElements.length === 0) {
+      updating = false;
+      return;
+    }
 
-    let count = 0;
-    for (let i = 0; i < itemElements.length; i++) {
-      let sellerId = ids[i];
+    console.log(`[DawnClient] Resolving usernames for ${itemElements.length} market items`);
 
+    const promises = itemElements.map(async (elem, i) => {
+      const sellerId = ids[i];
+      if (!sellerId) return;
+
+      // 1. Check cache first
+      if (profileCache.has(sellerId)) {
+        const cached = profileCache.get(sellerId);
+        if (cached) {
+          elem.innerText = elem.innerText.split(" - ")[0] + ` - ${cached.name}#${cached.shortId}`;
+        }
+        return;
+      }
+
+      // 2. Stagger requests slightly to prevent spamming
       try {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-
-        let fetchreq = await fetch(`https://api.kirka.io/api/user/getProfile`, {
+        await new Promise((resolve) => setTimeout(resolve, i * 50));
+        let fetchreq = await originalFetch(`https://api.kirka.io/api/user/getProfile`, {
           headers: {
             accept: "application/json, text/plain, */*",
             "content-type": "application/json;charset=UTF-8",
@@ -64,23 +145,25 @@ const customReqScripts = (settings) => {
           body: `{"id":"${sellerId}"}`,
           method: "POST",
         });
-        fetchreq = await fetchreq.json();
-        if (fetchreq["shortId"]) {
-          count++;
-          if (count >= itemElements.length) {
-            updating = false;
-          }
-          itemElements[i].innerText = itemElements[i].innerText.split(" - ")[0];
-          itemElements[
-            i
-          ].innerText += ` - ${fetchreq["name"]}#${fetchreq["shortId"]}`;
+        
+        if (!fetchreq.ok) throw new Error(`HTTP error ${fetchreq.status}`);
+        const profile = await fetchreq.json();
+        
+        if (profile && profile.shortId) {
+          profileCache.set(sellerId, { name: profile.name, shortId: profile.shortId });
+          elem.innerText = elem.innerText.split(" - ")[0] + ` - ${profile.name}#${profile.shortId}`;
         }
-      } catch {
-        count++;
-        if (count === itemElements.length) {
-          updating = false;
-        }
+      } catch (err) {
+        console.error(`[DawnClient] Failed to fetch market user profile for ${sellerId}:`, err);
       }
+    });
+
+    try {
+      await Promise.all(promises);
+    } catch (e) {
+      console.error("[DawnClient] Error resolving market users:", e);
+    } finally {
+      updating = false;
     }
   }
 
@@ -96,7 +179,6 @@ const customReqScripts = (settings) => {
     marginTop: "-.5em",
     marginBottom: "1em",
     border: ".125rem solid #202639",
-    background: "none",
     outline: "none",
     background: "#2f3957",
     width: "50%",
@@ -128,12 +210,32 @@ const customReqScripts = (settings) => {
       ids.length > 0 &&
       market_names
     ) {
-      marketUsers();
       updating = true;
+      marketUsers();
     }
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  const startObserver = () => {
+    observer.observe(document.body, { childList: true, subtree: true });
+    console.log("[DawnClient] customReqScripts MutationObserver attached.");
+  };
+
+  const stopObserver = () => {
+    observer.disconnect();
+    console.log("[DawnClient] customReqScripts MutationObserver detached.");
+  };
+
+  document.addEventListener("dawn-url-change", ({ detail: url }) => {
+    if (url === `${base_url}inventory` || url === `${base_url}hub/market`) {
+      startObserver();
+    } else {
+      stopObserver();
+    }
+  });
+
+  if (window.location.href === `${base_url}inventory` || window.location.href === `${base_url}hub/market`) {
+    startObserver();
+  }
 };
 
 module.exports = { customReqScripts };

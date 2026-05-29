@@ -27,6 +27,12 @@ for (const key in default_settings) {
   }
 }
 
+if (settings.fps_cap === 350 || settings.fps_cap === 380) {
+  settings.fps_cap = 370;
+  store.set("settings", settings);
+}
+
+
 if (!allowed_urls.includes(settings.base_url)) {
   settings.base_url = default_settings.base_url;
   store.set("settings", settings);
@@ -327,6 +333,7 @@ const createWindow = () => {
       webviewTag: true,
       sandbox: false,
       webSecurity: false,
+      backgroundThrottling: false,
       preload: path.join(__dirname, "../preload/game.js"),
     },
   });
@@ -354,9 +361,9 @@ const createWindow = () => {
     e.returnValue = scriptsPath;
   });
 
-  gameWindow.webContents.on("new-window", (e, url) => {
-    e.preventDefault();
-    require("electron").shell.openExternal(url);
+  gameWindow.webContents.setWindowOpenHandler((details) => {
+    require("electron").shell.openExternal(details.url);
+    return { action: "deny" };
   });
 
   gameWindow.webContents.on("did-navigate-in-page", (e, url) => {

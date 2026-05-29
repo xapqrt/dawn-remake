@@ -1,14 +1,12 @@
-const { app, session, protocol } = require("electron");
+const { app, session, protocol, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const url = require("url");
 
 const initResourceSwapper = () => {
-  protocol.registerFileProtocol("dawnclient", (request, callback) =>
-    callback({ path: request.url.replace("dawnclient://", "") })
-  );
-  protocol.registerFileProtocol("file", (request, callback) => {
-    callback(decodeURIComponent(request.url.replace("file:///", "")));
+  protocol.handle("dawnclient", (request) => {
+    const rawPath = decodeURIComponent(request.url.slice("dawnclient://".length));
+    return net.fetch(url.pathToFileURL(rawPath).toString());
   });
 
   const SWAP_FOLDER = path.join(

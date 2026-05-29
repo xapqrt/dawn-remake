@@ -2,11 +2,40 @@ let git_base = "Cheeseybowrger";
 const opener_list = "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/openerlist.json";
 
 async function fetchOpenerList() {
-  const res = await fetch(opener_list);
-  if (!res.ok) {
-    throw new Error("Failed to fetch opener list");
+  const cached = localStorage.getItem("cache-openerlist");
+  const cachedTime = localStorage.getItem("cache-time-openerlist");
+  const now = Date.now();
+  const ttlMs = 30 * 60 * 1000;
+
+  if (cached && cachedTime && (now - parseInt(cachedTime, 10)) < ttlMs) {
+    try {
+      console.log("[DawnClient] Loaded openerlist from cache");
+      return JSON.parse(cached);
+    } catch (e) {
+      console.error("[DawnClient] Error parsing cached openerlist:", e);
+    }
   }
-  return await res.json();
+
+  try {
+    console.log("[DawnClient] Fetching fresh openerlist from " + opener_list);
+    const res = await fetch(opener_list);
+    if (!res.ok) {
+      throw new Error("Failed to fetch opener list");
+    }
+    const data = await res.json();
+    localStorage.setItem("cache-openerlist", JSON.stringify(data));
+    localStorage.setItem("cache-time-openerlist", now.toString());
+    return data;
+  } catch (e) {
+    console.error("[DawnClient] Failed to fetch fresh openerlist:", e);
+    if (cached) {
+      console.log("[DawnClient] Falling back to stale cached openerlist");
+      try {
+        return JSON.parse(cached);
+      } catch (err) {}
+    }
+    throw e;
+  }
 }
 
 async function addOpenerList() {

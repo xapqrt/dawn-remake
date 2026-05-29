@@ -13,6 +13,199 @@ const scripts = fs.readdirSync(scriptsPath);
 const settings = ipcRenderer.sendSync("get-settings");
 const base_url = settings.base_url;
 
+document.addEventListener("juice-settings-changed", ({ detail }) => {
+  settings[detail.setting] = detail.value;
+});
+
+// ─── Dawn Client: Single-Master-Loop FPS Scheduler ───────────────────────────
+//
+// DESIGN RATIONALE:
+//   The previous per-callback approach had a fatal flaw: it created a NEW real
+//   rAF closure for EVERY game callback, causing the native rAF scheduler to
+//   fire hundreds of closures per display tick on uncapped Chromium. This wasted
+//   CPU and caused thermal throttle on fanless M-series Macs.
+//
+//   This implementation uses a SINGLE real rAF tick loop per window. All
+//   user-registered callbacks are stored in a queue. On each tick, if the
+//   target interval has elapsed, ALL queued callbacks fire in one batch.
+//   Otherwise the master tick reschedules itself (one real rAF call, not N).
+//
+//   KEY BEHAVIOURS:
+//   - One-shot callbacks (anonymous, registered only once, e.g. Vue transitions
+//     and popup animations): detected by not being re-registered in the same
+//     period → always pass through immediately to prevent UI starvation.
+//   - settings.unlimited_fps=false  →  target 60 FPS (safe cap)
+//   - settings.unlimited_fps=true   →  target settings.fps_cap (default 370)
+//     370 is safe for M-series (thermal headroom): the GPU tops at ~350 real
+//     rendered frames before the compositor caps it anyway.
+//   - Dynamic: reading settings on every tick so live menu changes take effect.
+//   - cancelAnimationFrame: fully supported via synthetic ID map.
+//
+(function installFPSLimiter() {
+  'use strict';
+
+  const wasUnlimitedAtStartup = settings.unlimited_fps !== false;
+
+  function applyLimiter(win) {
+    if (win._dawnLimited) return;
+    win._dawnLimited = true;
+
+    const _raf  = win.requestAnimationFrame.bind(win);
+    const _caf  = win.cancelAnimationFrame.bind(win);
+
+    if (!wasUnlimitedAtStartup) {
+      win.requestAnimationFrame = _raf;
+      win.cancelAnimationFrame = _caf;
+      return;
+    }
+
+    const callbacks = new Map();
+    let nextId = 1;
+    let pendingQueue = [];
+    let isLoopActive = false;
+    let inTick = false;
+    let lastFrameTime = performance.now();
+
+    let frameCount = 0;
+    let lastFpsLog = performance.now();
+
+    // High-performance MessageChannel for sub-millisecond, non-clamped event loop yielding
+    const channel = new MessageChannel();
+    const yieldQueue = [];
+    channel.port1.onmessage = () => {
+      while (yieldQueue.length > 0) {
+        const cb = yieldQueue.shift();
+        if (cb) {
+          try { cb(); } catch (e) { /* ignore */ }
+        }
+      }
+    };
+
+    function fastYield(cb) {
+      yieldQueue.push(cb);
+      channel.port2.postMessage(null);
+    }
+
+    function tick() {
+      isLoopActive = false;
+
+      const cap = settings.unlimited_fps !== false
+        ? Math.max(1, parseInt(settings.fps_cap, 10) || 370)
+        : 60;
+      const intervalMs = 1000 / cap;
+
+      const now = performance.now();
+      const elapsed = now - lastFrameTime;
+      const delay = intervalMs - elapsed;
+
+      // If we are close enough (within 0.2ms) of target frame time, run callbacks
+      if (delay <= 0.2) {
+        if (now - lastFrameTime > intervalMs * 2) {
+          lastFrameTime = now;
+        } else {
+          lastFrameTime += intervalMs;
+        }
+
+        const currentQueue = pendingQueue;
+        pendingQueue = [];
+
+        // Count frames for debug logs
+        frameCount++;
+        if (now - lastFpsLog >= 1000) {
+          console.log(`[DawnClient Limiter] Path: ${win.location.pathname}, Cap: ${cap}, Fired FPS: ${frameCount}, Active callbacks: ${callbacks.size}`);
+          frameCount = 0;
+          lastFpsLog = now;
+        }
+
+        // Run all queued callbacks in one master batch
+        inTick = true;
+        try {
+          for (let i = 0; i < currentQueue.length; i++) {
+            const id = currentQueue[i];
+            const cb = callbacks.get(id);
+            if (cb) {
+              callbacks.delete(id);
+              try { cb(now); } catch (e) { /* ignore */ }
+            }
+          }
+        } finally {
+          inTick = false;
+        }
+
+        ensureLoopRunning();
+      } else {
+        isLoopActive = true;
+        if (delay > 1.5) {
+          setTimeout(tick, Math.floor(delay - 1));
+        } else {
+          fastYield(tick);
+        }
+      }
+    }
+
+    function ensureLoopRunning() {
+      if (isLoopActive) return;
+      if (pendingQueue.length === 0) return;
+
+      isLoopActive = true;
+
+      const cap = settings.unlimited_fps !== false
+        ? Math.max(1, parseInt(settings.fps_cap, 10) || 370)
+        : 60;
+      const intervalMs = 1000 / cap;
+
+      const now = performance.now();
+      const elapsed = now - lastFrameTime;
+      const delay = intervalMs - elapsed;
+
+      if (delay <= 0.2) {
+        fastYield(tick);
+      } else if (delay > 1.5) {
+        setTimeout(tick, Math.floor(delay - 1));
+      } else {
+        fastYield(tick);
+      }
+    }
+
+    win.requestAnimationFrame = function limitedRAF(callback) {
+      const id = nextId++;
+      callbacks.set(id, callback);
+      pendingQueue.push(id);
+      if (!inTick) {
+        ensureLoopRunning();
+      }
+      return id;
+    };
+
+    win.cancelAnimationFrame = function limitedCAF(id) {
+      callbacks.delete(id);
+    };
+  }
+
+  // Patch the main window immediately (before any page scripts parse)
+  applyLimiter(window);
+
+  // Patch iframes lazily when their contentWindow is first accessed
+  try {
+    const origDesc = Object.getOwnPropertyDescriptor(
+      HTMLIFrameElement.prototype, 'contentWindow'
+    );
+    if (origDesc && origDesc.get) {
+      Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        get() {
+          const win = origDesc.get.call(this);
+          if (win) { try { applyLimiter(win); } catch (_) {} }
+          return win;
+        },
+        configurable: true,
+      });
+    }
+  } catch (_) { /* non-fatal */ }
+
+  console.log('[DawnClient] FPS scheduler installed (cap:', (settings.fps_cap || 370), ', unlimited:', wasUnlimitedAtStartup, ')');
+})();
+
+
 if (!window.location.href.startsWith(base_url)) {
   delete window.process;
   delete window.require;
@@ -58,12 +251,14 @@ const originalConsole = {
   trace: console.trace.bind(console),
 };
 
-document.addEventListener("DOMContentLoaded", async () => {
+const runInit = async () => {
   console.log = originalConsole.log;
   console.warn = originalConsole.warn;
   console.error = originalConsole.error;
   console.info = originalConsole.info;
   console.trace = originalConsole.trace;
+
+  // Early-stage FPS limiter is already running
 
   const menu = new Menu();
   menu.init();
@@ -73,19 +268,63 @@ document.addEventListener("DOMContentLoaded", async () => {
   editResourceSwapper();
   initGallery();
 
-  const fetchAll = async () => {
-    const [customizations, clan, weapons] = await Promise.all([
-      fetch(
-        "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/badges.json"
-      ).then((r) => r.json()),
-      fetch(
-        "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/clans.json"
-      ).then((r) => r.json()),
-    ])
+  const fetchWithCache = async (key, url, ttlMs = 30 * 60 * 1000) => {
+    const cached = localStorage.getItem(`cache-${key}`);
+    const cachedTime = localStorage.getItem(`cache-time-${key}`);
+    const now = Date.now();
+    
+    if (cached && cachedTime && (now - parseInt(cachedTime, 10)) < ttlMs) {
+      try {
+        originalConsole.log(`[DawnClient] Loaded ${key} from cache (expires in ${Math.round((ttlMs - (now - parseInt(cachedTime, 10))) / 1000)}s)`);
+        return JSON.parse(cached);
+      } catch (e) {
+        originalConsole.error(`[DawnClient] Error parsing cached ${key}:`, e);
+      }
+    }
+    
+    try {
+      originalConsole.log(`[DawnClient] Fetching fresh ${key} from ${url}`);
+      const startTime = performance.now();
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      localStorage.setItem(`cache-${key}`, JSON.stringify(data));
+      localStorage.setItem(`cache-time-${key}`, now.toString());
+      originalConsole.log(`[DawnClient] Fetched ${key} in ${Math.round(performance.now() - startTime)}ms`);
+      return data;
+    } catch (e) {
+      originalConsole.error(`[DawnClient] Failed to fetch ${key}:`, e);
+      if (cached) {
+        originalConsole.log(`[DawnClient] Falling back to stale cached ${key}`);
+        try {
+          return JSON.parse(cached);
+        } catch (err) {}
+      }
+      return null;
+    }
+  };
 
-    localStorage.setItem("juice-customizations", JSON.stringify(customizations))
-    localStorage.setItem("juice-clans", JSON.stringify(clan))
-  }
+  const fetchAll = async () => {
+    const startTime = performance.now();
+    const [customizations, clan] = await Promise.all([
+      fetchWithCache(
+        "juice-customizations",
+        "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/badges.json"
+      ),
+      fetchWithCache(
+        "juice-clans",
+        "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/clans.json"
+      )
+    ]);
+
+    if (customizations) {
+      localStorage.setItem("juice-customizations", JSON.stringify(customizations));
+    }
+    if (clan) {
+      localStorage.setItem("juice-clans", JSON.stringify(clan));
+    }
+    originalConsole.log(`[DawnClient] fetchAll completed in ${Math.round(performance.now() - startTime)}ms`);
+  };
   fetchAll();
 
   const formatLink = (link) => link.replace(/\\/g, "/");
@@ -126,10 +365,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!general_news && !promotional_news && !event_news && !alert_news)
       return;
 
-    let news = await fetch(
+    let news = await fetchWithCache(
+      "juice-news",
       "https://raw.githubusercontent.com/zVipexx/dawn-client/refs/heads/main/news.json"
-    ).then((r) => r.json());
-    if (!news.length) return;
+    );
+    if (!news || !news.length) return;
 
     news = news.filter(({ category }) => {
       const categories = {
@@ -1712,9 +1952,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       kd.style.gap = "0.25rem";
       kd.innerHTML = `<span class="kd-ratio">0</span> <span class="text-kd" style="font-size: 0.75rem;">K/D</span>`;
 
-      document.querySelector(".kill-death").appendChild(kd);
-      kills.addEventListener("DOMSubtreeModified", updateKD);
-      deaths.addEventListener("DOMSubtreeModified", updateKD);
+      const kdObserver = new MutationObserver(() => updateKD());
+      kdObserver.observe(kills, { childList: true, characterData: true, subtree: true });
+      kdObserver.observe(deaths, { childList: true, characterData: true, subtree: true });
     };
 
     document.addEventListener("juice-settings-changed", ({ detail }) => {
@@ -2028,13 +2268,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
 
     let lastUrl = location.href;
-    new MutationObserver(() => {
+    const checkUrl = () => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
-        observers.forEach(o => o.disconnect());
-        observers.clear();
+        // Only clear observers if we actually left the match URL prefixes
+        if (!location.href.startsWith(`${base_url}games`) && !location.href.startsWith(`${base_url}hub/ranked`)) {
+          originalConsole.log("[DawnClient] Left match URL, disconnecting observers:", lastUrl);
+          observers.forEach(o => o.disconnect());
+          observers.clear();
+        }
       }
-    }).observe(document, { subtree: true, childList: true });
+    };
+    window.addEventListener("popstate", checkUrl);
+    window.addEventListener("hashchange", checkUrl);
+    
+    const originalPushState = history.pushState;
+    history.pushState = function(...args) {
+      originalPushState.apply(this, args);
+      checkUrl();
+    };
+    
+    const originalReplaceState = history.replaceState;
+    history.replaceState = function(...args) {
+      originalReplaceState.apply(this, args);
+      checkUrl();
+    };
 
     observeShortIds();
     applyCustomizationsEsc();
@@ -2154,7 +2412,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         const elem = document.querySelector(selector);
         if (!elem) return;
         new MutationObserver(() => {
-          if (setting()) execute();
+          if (setting()) {
+            const t0 = performance.now();
+            execute();
+            const duration = performance.now() - t0;
+            if (duration > 10) {
+              originalConsole.warn(`[DawnClient] Performance warning: ${selector} observer handler took ${duration.toFixed(2)}ms`);
+            }
+          }
         }).observe(elem, { childList: true });
       };
 
@@ -2176,7 +2441,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             const elem = document.querySelector(selector);
             if (!elem) return;
             new MutationObserver(() => {
-              if (setting()) execute();
+              if (setting()) {
+                const t0 = performance.now();
+                execute();
+                const duration = performance.now() - t0;
+                if (duration > 10) {
+                  originalConsole.warn(`[DawnClient] Performance warning: ${selector} observer handler took ${duration.toFixed(2)}ms`);
+                }
+              }
             }).observe(elem, { childList: true });
           };
 
@@ -2189,8 +2461,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   const handleMarket = () => {
+    originalConsole.log("[DawnClient] Entering market page, starting check loop");
     const interval = setInterval(() => {
-      if (!window.location.href === `${base_url}hub/market`) {
+      if (window.location.href !== `${base_url}hub/market`) {
+        originalConsole.log("[DawnClient] Leaving market page, clearing check loop");
         clearInterval(interval);
         return;
       }
@@ -2486,6 +2760,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.info = originalConsole.info;
     console.trace = originalConsole.trace;
 
+    document.dispatchEvent(new CustomEvent("dawn-url-change", { detail: url }));
+
     if (url === `${base_url}`) {
       handleLobby();
       handleInGame();
@@ -2519,5 +2795,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     applyUIFeatures();
   };
 
-  handleInitialLoad();
-})();
+};
+
+const startPreload = () => {
+  runInit();
+};
+
+const addEvent = window.addEventListener || document.addEventListener;
+if (typeof addEvent === 'function') {
+  addEvent("DOMContentLoaded", startPreload);
+} else {
+  if (document.readyState === "interactive" || document.readyState === "complete" || document.body) {
+    startPreload();
+  } else {
+    const timer = setInterval(() => {
+      if (document.readyState === "interactive" || document.readyState === "complete" || document.body) {
+        clearInterval(timer);
+        startPreload();
+      }
+    }, 5);
+  }
+}

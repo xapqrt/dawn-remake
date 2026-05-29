@@ -20,7 +20,16 @@ class DiscordRPC {
   }
 
   setActivity(activity = this.defaultActivity()) {
-    this.client.setActivity(activity).catch(console.error);
+    try {
+      if (!this.client || !this.client.transport || !this.client.transport.socket) {
+        return; // Discord client is not connected
+      }
+      this.client.setActivity(activity).catch((err) => {
+        console.warn("[DawnClient] Discord RPC setActivity failed:", err.message);
+      });
+    } catch (err) {
+      console.warn("[DawnClient] Discord RPC exception in setActivity:", err.message);
+    }
   }
 
   setState(state) {
