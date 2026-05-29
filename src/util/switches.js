@@ -36,6 +36,11 @@ function applySwitches(settings) {
     // Map textures directly to GPU buffers, eliminating double-copy overhead and laptop heat
     app.commandLine.appendSwitch("enable-gpu-memory-buffer-compositor-resources");
     app.commandLine.appendSwitch("enable-gpu-memory-buffer-video-frames");
+    // safe on macOS Metal, but causes screen flickering and invisible characters on Windows:
+    // Prevents per-frame driver overhead that causes GPU ms spikes in WebGL apps
+    app.commandLine.appendSwitch("disable-gpu-driver-bug-workarounds");
+    // Use begin-frame scheduling for lower GPU submission latency
+    app.commandLine.appendSwitch("enable-begin-frame-scheduling");
   }
 
   // ─── Prevent background throttling, App Nap, or occlusion-based CPU cuts ─────
@@ -88,10 +93,6 @@ function applySwitches(settings) {
   app.commandLine.appendSwitch("enable-webgl-image-chromium");
   app.commandLine.appendSwitch("enable-drdc");
   app.commandLine.appendSwitch("enable-hardware-overlays");
-  // Prevents per-frame driver overhead that causes GPU ms spikes in WebGL apps
-  app.commandLine.appendSwitch("disable-gpu-driver-bug-workarounds");
-  // Use begin-frame scheduling for lower GPU submission latency
-  app.commandLine.appendSwitch("enable-begin-frame-scheduling");
 
   // ─── Feature flags (SINGLE call each — Chromium ignores all but the last) ─────
   const enableFeatures = [
