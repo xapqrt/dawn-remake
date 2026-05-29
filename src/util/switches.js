@@ -55,13 +55,6 @@ function applySwitches(settings) {
     "--min_semi_space_size=128"
   );
 
-  // ─── Network: low-latency, no proxy overhead, no background noise ────────────
-  // no-proxy-server: skip WPAD/PAC proxy lookups → saves ~20-150 ms on WS connect
-  app.commandLine.appendSwitch("no-proxy-server");
-  // Async DNS: resolve hostnames off the main thread (prevents DNS stall spikes)
-  app.commandLine.appendSwitch("enable-async-dns");
-  // TCP Fast Open: send data in the first SYN packet (reduces RTT by 1 round trip)
-  app.commandLine.appendSwitch("enable-tcp-fastopen");
   // Suppress device-discovery multicast noise on the local network
   app.commandLine.appendSwitch("disable-device-discovery-notifications");
   // Disables all background network queries (updates, telemetry, etc.) to eliminate ping spikes
@@ -78,6 +71,10 @@ function applySwitches(settings) {
   app.commandLine.appendSwitch("enable-webgl-image-chromium");
   app.commandLine.appendSwitch("enable-drdc");
   app.commandLine.appendSwitch("enable-hardware-overlays");
+  // Prevents per-frame driver overhead that causes GPU ms spikes in WebGL apps
+  app.commandLine.appendSwitch("disable-gpu-driver-bug-workarounds");
+  // Use begin-frame scheduling for lower GPU submission latency
+  app.commandLine.appendSwitch("enable-begin-frame-scheduling");
 
   // ─── Feature flags (SINGLE call each — Chromium ignores all but the last) ─────
   const enableFeatures = [

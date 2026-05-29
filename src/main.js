@@ -1,57 +1,23 @@
 const { app } = require("electron");
-const dns = require("dns").promises;
+const { applySwitches } = require("./util/switches");
 
-async function startApp() {
-  try {
-    const domains = [
-      "kirka.io",
-      "api.kirka.io",
-      "api2.kirka.io",
-      "de.kirka.io",
-      "us.kirka.io",
-      "sg.kirka.io",
-      "in.kirka.io",
-      "jp.kirka.io",
-      "br.kirka.io",
-      "au.kirka.io"
-    ];
-    const mappings = [];
-    
-    // Resolve all domains in parallel to minimize startup delay
-    const resolvePromise = Promise.all(
-      domains.map(async (domain) => {
-        try {
-          const ips = await dns.resolve4(domain);
-          if (ips && ips.length > 0) {
-            mappings.push(`MAP ${domain} ${ips[0]}`);
-          }
-        } catch (_) {}
-      })
-    );
+// ─── Apply Chromium command-line switches BEFORE the app is ready ─────────────
+// This is the ONLY place these should be set. They must come before app.ready.
+const Store = require("electron-store");
+const { default_settings } = require("./util/defaults.json");
 
-    // Bound DNS query time to 150ms so startup remains instant even on offline / DNS lag scenarios
-    await Promise.race([
-      resolvePromise,
-      new Promise((resolve) => setTimeout(resolve, 150))
-    ]);
+const store = new Store();
+if (!store.has("settings")) store.set("settings", default_settings);
+const settings = store.get("settings");
 
-    if (mappings.length > 0) {
-      const rules = mappings.join(", ");
-      app.commandLine.appendSwitch("host-rules", rules);
-      console.log("[DawnClient] Local DNS host-rules mapped:", rules);
-    }
-  } catch (e) {
-    console.error("[DawnClient] DNS pre-resolve skipped:", e);
-  }
+applySwitches(settings);
 
-  app.on("ready", async () => {
-    const { initSplash } = require("./windows/splash");
-    const { initResourceSwapper } = require("./addons/swapper");
-    initSplash();
-    initResourceSwapper();
-  });
-}
+// ─── App lifecycle ─────────────────────────────────────────────────────────────
+app.on("ready", () => {
+  const { initSplash } = require("./windows/splash");
+  const { initResourceSwapper } = require("./addons/swapper");
+  initSplash();
+  initResourceSwapper();
+});
 
 app.on("window-all-closed", () => app.quit());
-
-startApp();

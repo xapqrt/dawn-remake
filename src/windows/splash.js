@@ -7,8 +7,8 @@ autoUpdater.autoDownload = true;
 
 autoUpdater.setFeedURL({
   provider: "github",
-  owner: "zVipexx",
-  repo: "dawn-client",
+  owner: "xapqrt",
+  repo: "dawn-remake",
 });
 
 let splashWindow;

@@ -4,6 +4,8 @@ const { editResourceSwapper } = require("../addons/swappermenu");
 const { customReqScripts } = require("../addons/customReqScripts");
 const { ipcRenderer, clipboard } = require("electron");
 const { initGallery } = require("../addons/gallery");
+const { initProxySelector } = require("../addons/proxySelector");
+
 const fs = require("fs");
 const path = require("path");
 
@@ -277,6 +279,9 @@ const runInit = async () => {
   customReqScripts(settings);
   editResourceSwapper();
   initGallery();
+
+  // Auto-select the lowest-latency Kirka.io proxy (non-blocking)
+  initProxySelector(base_url);
 
   const fetchWithCache = async (key, url, ttlMs = 30 * 60 * 1000) => {
     const cached = localStorage.getItem(`cache-${key}`);

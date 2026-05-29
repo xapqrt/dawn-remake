@@ -23,6 +23,6 @@ linux:
   artifactName: "${name}-${version}-linux-${arch}.${ext}"
 publish:
   - provider: github
-    owner: zVipexx
-    repo: dawn-client
+    owner: xapqrt
+    repo: dawn-remake
     releaseType: release

@@ -1,7 +1,7 @@
 const { BrowserWindow, ipcMain, app, shell, clipboard, dialog } = require("electron");
 const { default_settings, allowed_urls } = require("../util/defaults.json");
 const { registerShortcuts } = require("../util/shortcuts");
-const { applySwitches } = require("../util/switches");
+
 const { nativeImage } = require('electron');
 const DiscordRPC = require("../addons/rpc");
 const path = require("path");
@@ -316,7 +316,7 @@ ipcMain.on("save-sound", (event, soundname, filePath, volume) => {
   }
 });
 
-applySwitches(settings);
+
 
 const createWindow = () => {
   gameWindow = new BrowserWindow({
