@@ -75,25 +75,26 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
 
     const callbacks = new Map();
     let nextId = 1;
-    let pendingQueue = [];
+    let queueA = [];
+    let queueB = [];
+    let pendingQueue = queueA;
     let isLoopActive = false;
     let inTick = false;
     let lastFrameTime = performance.now();
 
-    // High-performance MessageChannel for sub-millisecond, non-clamped event loop yielding
+    // High-performance, zero-allocation MessageChannel yielding
+    let yieldCallback = null;
     const channel = new MessageChannel();
-    const yieldQueue = [];
     channel.port1.onmessage = () => {
-      while (yieldQueue.length > 0) {
-        const cb = yieldQueue.shift();
-        if (cb) {
-          try { cb(); } catch (e) { /* ignore */ }
-        }
+      if (yieldCallback) {
+        const cb = yieldCallback;
+        yieldCallback = null;
+        try { cb(); } catch (e) { /* ignore */ }
       }
     };
 
     function fastYield(cb) {
-      yieldQueue.push(cb);
+      yieldCallback = cb;
       channel.port2.postMessage(null);
     }
 
@@ -125,7 +126,8 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
         }
 
         const currentQueue = pendingQueue;
-        pendingQueue = [];
+        pendingQueue = (pendingQueue === queueA) ? queueB : queueA;
+        pendingQueue.length = 0; // zero-allocation clear
 
         // Run all queued callbacks in one master batch
         inTick = true;

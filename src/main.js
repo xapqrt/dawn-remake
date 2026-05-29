@@ -3,7 +3,18 @@ const dns = require("dns").promises;
 
 async function startApp() {
   try {
-    const domains = ["kirka.io", "api.kirka.io", "api2.kirka.io"];
+    const domains = [
+      "kirka.io",
+      "api.kirka.io",
+      "api2.kirka.io",
+      "de.kirka.io",
+      "us.kirka.io",
+      "sg.kirka.io",
+      "in.kirka.io",
+      "jp.kirka.io",
+      "br.kirka.io",
+      "au.kirka.io"
+    ];
     const mappings = [];
     
     // Resolve all domains in parallel to minimize startup delay
