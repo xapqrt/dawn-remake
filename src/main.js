@@ -1,5 +1,14 @@
 const { app } = require("electron");
 const { applySwitches } = require("./util/switches");
+const os = require("os");
+
+// ─── Set OS scheduling priority to high ─────────────────────────────────────────
+try {
+  os.setPriority(0, -10);
+  console.log(`[DawnClient] Main process CPU priority set to high:`, os.getPriority());
+} catch (e) {
+  console.error("[DawnClient] Failed to set main process CPU priority:", e);
+}
 
 // ─── Apply Chromium command-line switches BEFORE the app is ready ─────────────
 // This is the ONLY place these should be set. They must come before app.ready.

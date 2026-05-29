@@ -15,6 +15,15 @@ const scripts = fs.readdirSync(scriptsPath);
 const settings = ipcRenderer.sendSync("get-settings");
 const base_url = settings.base_url;
 
+const os = require("os");
+try {
+  // Set renderer process CPU scheduling priority to high to reduce frame timing variations and input lag
+  os.setPriority(0, -10);
+  console.log(`[DawnClient] Renderer process CPU priority set to high:`, os.getPriority());
+} catch (e) {
+  console.error("[DawnClient] Failed to set renderer process CPU priority:", e);
+}
+
 document.addEventListener("juice-settings-changed", ({ detail }) => {
   settings[detail.setting] = detail.value;
 });
@@ -852,7 +861,6 @@ const runInit = async () => {
     document.head.appendChild(customStyles);
 
     const updateTheme = () => {
-      const settings = ipcRenderer.sendSync("get-settings");
       const cssLink = settings.css_link;
       const advancedCSS = settings.advanced_css;
 
@@ -884,7 +892,6 @@ const runInit = async () => {
     document.head.appendChild(addedStyles);
 
     const updateUIFeatures = () => {
-      const settings = ipcRenderer.sendSync("get-settings");
       const styles = [];
 
       if (settings.perm_tablist)
@@ -1001,7 +1008,6 @@ const runInit = async () => {
   const handleLobby = () => {
     initRoomPresets();
     const applyLobbyChanges = () => {
-      const settings = ipcRenderer.sendSync("get-settings");
 
       lobbyKeybindReminder(settings);
       lobbyNews(settings);
@@ -1235,8 +1241,6 @@ const runInit = async () => {
   };
 
   const handleServers = async () => {
-    const settings = ipcRenderer.sendSync("get-settings");
-
     if (!window.servers) {
       window.servers = true;
 
@@ -1383,8 +1387,6 @@ const runInit = async () => {
 
   const handleProfile = () => {
     disconnectObservers();
-
-    const settings = ipcRenderer.sendSync("get-settings");
 
     const addNicknameButton = () => {
       const profile = document.querySelector(".tab-content > .profile-cont > .profile");
@@ -1692,7 +1694,6 @@ const runInit = async () => {
   };
 
   const handleInGame = () => {
-    let settings = ipcRenderer.sendSync("get-settings");
     const nicknames = JSON.parse(localStorage.getItem("nicknames") || "{}");
 
     let red_players = [];
@@ -2508,7 +2509,6 @@ const runInit = async () => {
   };
 
   const handleFriends = () => {
-    const settings = ipcRenderer.sendSync("get-settings");
     const nicknames = JSON.parse(localStorage.getItem("nicknames") || "{}");
 
     if (window.copyGameLink) {
