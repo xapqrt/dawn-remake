@@ -1247,7 +1247,103 @@ class Menu {
         this.initMenu();
       }
     });
+
+    // ─── Auto-Select Best Proxy Button ─────────────────────────────────────────
+    const autoSelectProxyBtn = this.menu.querySelector("#auto-select-proxy");
+    const proxyLatencyResults = this.menu.querySelector("#proxy-latency-results");
+
+    if (autoSelectProxyBtn) {
+      const PROXY_URLS = [
+        "https://kirka.io/",
+        "https://cloudymonk.com/",
+        "https://snipers.io/",
+        "https://ask101math.com/",
+        "https://fpsiogame.com/",
+        "https://cloudconverts.com/",
+      ];
+
+      autoSelectProxyBtn.addEventListener("click", async () => {
+        if (autoSelectProxyBtn.dataset.testing === "true") return;
+        autoSelectProxyBtn.dataset.testing = "true";
+
+        const btnText = autoSelectProxyBtn.querySelector(".text");
+        const originalText = btnText.innerText;
+        btnText.innerText = "⏳ Testing proxies...";
+        autoSelectProxyBtn.style.opacity = "0.7";
+
+        if (proxyLatencyResults) {
+          proxyLatencyResults.style.display = "block";
+          proxyLatencyResults.innerText = "Probing all proxies...";
+        }
+
+        // Ping all proxies in parallel
+        const results = await Promise.all(
+          PROXY_URLS.map(async (url) => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000);
+            const start = performance.now();
+            try {
+              await fetch(url, { method: "HEAD", signal: controller.signal, cache: "no-store", mode: "no-cors" });
+              clearTimeout(timeoutId);
+              return { url, latency: Math.round(performance.now() - start) };
+            } catch (_) {
+              clearTimeout(timeoutId);
+              return { url, latency: Infinity };
+            }
+          })
+        );
+
+        results.sort((a, b) => a.latency - b.latency);
+
+        // Display results
+        if (proxyLatencyResults) {
+          proxyLatencyResults.innerHTML = results.map((r, i) => {
+            const label = r.url.replace("https://", "").replace("/", "");
+            const ping = r.latency === Infinity ? "UNREACHABLE" : `${r.latency}ms`;
+            const color = r.latency === Infinity ? "#e24f4f" : (r.latency < 100 ? "#4dbf4d" : (r.latency < 250 ? "#ffb914" : "#e24f4f"));
+            const star = i === 0 && r.latency !== Infinity ? " ⭐" : "";
+            return `<span style="color:${color}; margin-right:8px;">${label}: ${ping}${star}</span>`;
+          }).join("");
+        }
+
+        // Apply best
+        const best = results.find(r => r.latency !== Infinity);
+        if (best) {
+          this.settings.base_url = best.url;
+          ipcRenderer.send("update-setting", "base_url", best.url);
+
+          // Update the dropdown in the menu
+          const baseUrlSelect = this.menu.querySelector("#base_url");
+          if (baseUrlSelect) baseUrlSelect.value = best.url;
+
+          // Invalidate proxy cache so next auto-run re-probes
+          localStorage.removeItem("dawn-proxy-best-url");
+          localStorage.removeItem("dawn-proxy-best-url-time");
+
+          btnText.innerText = `✅ Selected: ${best.url.replace("https://", "").replace("/", "")} (${best.latency}ms)`;
+          autoSelectProxyBtn.style.opacity = "1";
+
+          // Offer to reload
+          setTimeout(() => {
+            if (window.location.href !== best.url) {
+              const doReload = confirm(`Dawn Client: Switching to ${best.url.replace("https://", "").replace("/", "")} (${best.latency}ms ping). Reload now?`);
+              if (doReload) window.location.href = best.url;
+            }
+            btnText.innerText = originalText;
+            delete autoSelectProxyBtn.dataset.testing;
+          }, 2000);
+        } else {
+          btnText.innerText = "❌ All proxies unreachable";
+          autoSelectProxyBtn.style.opacity = "1";
+          setTimeout(() => {
+            btnText.innerText = originalText;
+            delete autoSelectProxyBtn.dataset.testing;
+          }, 3000);
+        }
+      });
+    }
   }
+
 
   createModal(title, description) {
     const modal = document.createElement("div");

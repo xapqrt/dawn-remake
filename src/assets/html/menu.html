@@ -540,11 +540,19 @@
           <span>Proxy URL</span>
           <select id="base_url" data-setting="base_url">
             <option value="https://kirka.io/">kirka.io</option>
+            <option value="https://cloudymonk.com/">cloudymonk.com</option>
             <option value="https://snipers.io/">snipers.io</option>
             <option value="https://ask101math.com/">ask101math.com</option>
             <option value="https://fpsiogame.com/">fpsiogame.com</option>
             <option value="https://cloudconverts.com/">cloudconverts.com</option>
           </select>
+        </div>
+        <div class="option">
+          <button id="auto-select-proxy" class="juice-button" title="Test all proxy servers and switch to the one with the lowest ping">
+            <span class="text">⚡ Auto-Select Best Proxy</span>
+            <div class="custom-border"></div>
+          </button>
+          <div id="proxy-latency-results" style="font-size:0.75rem; opacity:0.7; padding: 4px 0; display:none; width:100%;"></div>
         </div>
       </div>
       <div class="option-group">
