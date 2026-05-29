@@ -101,6 +101,14 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
     }
 
     function getFrameCap() {
+      // Dynamic thermal cap: throttle rendering when window is minimized/hidden
+      if (win.document && win.document.visibilityState === "hidden") {
+        return 5; // Capping to 5 FPS when minimized/hidden completely eliminates CPU/GPU usage
+      }
+      // Or if the window is unfocused (user tabbed out / interacting with another app), drop frame cap to 30 FPS
+      if (win.document && !win.document.hasFocus()) {
+        return 30;
+      }
       if (settings.unlimited_fps === false) return 60;
       const isMatch = win.location.pathname.startsWith("/games/") || win.location.pathname.startsWith("/hub/ranked");
       if (isMatch) {
@@ -192,6 +200,19 @@ document.addEventListener("juice-settings-changed", ({ detail }) => {
     win.cancelAnimationFrame = function limitedCAF(id) {
       callbacks.delete(id);
     };
+
+    try {
+      win.addEventListener("focus", () => {
+        lastFrameTime = performance.now();
+        ensureLoopRunning();
+      });
+      win.addEventListener("visibilitychange", () => {
+        if (win.document && win.document.visibilityState === "visible") {
+          lastFrameTime = performance.now();
+          ensureLoopRunning();
+        }
+      });
+    } catch (_) {}
   }
 
   // Patch the main window immediately (before any page scripts parse)

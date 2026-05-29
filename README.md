@@ -1,86 +1,64 @@
-# Dawn Remake Client
+# ⚡ Dawn Remake Client
 
-A highly optimized Electron client for Kirka.io built to deliver the absolute lowest input latency and most stable ping.
+Welcome to the **Dawn Remake Client**, a heavily optimized fork of [zVipexx/dawn-client](https://github.com/zVipexx/dawn-client) (up to v1.0.9) built specifically for Kirka.io gamers. 
 
----
-
-## ⚡ The Dawn Remake Optimization Layer
-This version is an optimized fork of [zVipexx/dawn-client](https://github.com/zVipexx/dawn-client) engineered to resolve input delay, micro-stutters, and network jitter:
-
-### 1. High-Precision Single-Master-Loop Scheduler
-* **The Problem in Base Client:** The default browser-level implementation of nested timers enforces a **4ms minimum clamp** on `setTimeout`, capping rendering loops to a maximum of 200-250 FPS. Scheduling a separate timer for every game script callback also wasted CPU and caused thermal throttling on M-series Macs.
-* **Our Solution:** Built a single, unified master tick scheduler.
-  - All callbacks are queued and executed in a single high-performance batch.
-  - Uses `MessageChannel` port messaging (`postMessage` macrotasks) for sub-millisecond, non-clamped event loop yielding.
-  - Dynamically switches to `setTimeout` only for long sleeps to protect CPU thermals, maintaining a rock-solid **300-350+ FPS** (up to a 370 FPS cap).
-
-### 2. Bypassing Compositor Latency (Lowest First-Shot Delay)
-* Intercepts WebGL canvas context requests at evaluation-start and applies:
-  - `desynchronized: true`: Bypasses double-buffered compositor pipeline queues, drawing WebGL output directly to screen presentation layers. This eliminates 1-2 frames (**8-16ms**) of input-to-display latency, giving you the fastest time-to-first-shot.
-  - `powerPreference: "high-performance"`: Requests discrete GPU cores (or high-performance graphics clusters) directly for the WebGL pipeline.
-
-### 3. Background Network Isolation (Zero Ping Spikes)
-* Applied Chromium command-line switches to shut down background browser threads that run diagnostic queries, telemetry, and updates:
-  - `disable-background-networking` (stops background fetches)
-  - `disable-client-side-phishing-detection` (stops safe-browsing real-time checks)
-  - `disable-component-update` (disables background plugin downloads)
-  - `disable-sync` / `disable-domain-reliability`
-  - Disabled `SafeBrowsing` and `BackgroundFetch` features.
-* **Result:** The client's WebSockets operate in near-total isolation from background traffic, resolving casual latency spikes and rubberbanding.
-
-### 4. Dynamic VSync & Core GPU Optimization
-* Restored native VSync toggling. Disabling "Unlimited FPS" completely suspends the scheduler and locks the client to your monitor's native refresh rate (e.g. 120Hz ProMotion) with zero overhead.
-* Enabled modern GPU pipeline optimization flags:
-  - `enable-webgl-image-chromium` (direct WebGL presentation layers)
-  - `enable-drdc` (dual-threaded rendering thread)
-  - `enable-hardware-overlays` (bypasses composition lag)
+Our goal is simple: **Maximum FPS, Flat-line Ping, Zero Input Delay, and Cool Laptops.**
 
 ---
 
-## 🎨 Base Features
-All core Dawn Client features are fully supported:
-- Discord Rich Presence
-- Custom Resource Swapper (Skins, Sounds, Crosshairs, CSS, etc.)
-- Userscripts & Adblock support
-- Pack/Chest Auto Opener
-- Map Images in Server List & Unofficial Lobby News
-- Custom Listing Prices & Seller Username resolution in the Market
-- Skip Loading Screen & Fullscreen shortcuts
+## 🚀 Dawn Remake vs. Dawn Client v1.0.9: What's Improved?
+
+Here is a breakdown of why Dawn Remake runs circles around the original client:
+
+| Feature / Fix | Original Dawn Client (v1.0.9) | Dawn Remake Client (Remake) | Why it matters to you |
+| :--- | :--- | :--- | :--- |
+| **Lobby & Menu Lag** | ❌ Runs menus at 350+ FPS, causing CPU lag and slow button clicks. | ✅ **Smart 60 FPS Lobby Cap** | Shop, inventory, and play buttons load instantly; CPU is saved for matches. |
+| **Laptop Heating (AFK/Tab-out)** | ❌ Runs at full speed in the background, cooking your laptop. | ✅ **Thermal Guard (5/30 FPS Cap)** | Drops to 5 FPS when minimized, 30 FPS when tabbed out. Laptop stays ice cold when you're not playing. Instantly wakes back up when clicked. |
+| **Ping Spikes & Jitter** | ❌ Sockets go "cold", causing periodic 80-160ms spikes. | ✅ **Flat-line Ping Tuning** | Keeps game sockets warm and active. Flat-line connection with zero random stutters or rubberbanding. |
+| **Proxy Selector** | ❌ Startup redirects you to slow proxies based on fake browser page loads. | ✅ **Real WebSocket Ping Monitor** | Keeps `kirka.io` as default. Measures real in-game gameplay ping, and only offers to switch if a proxy is 50ms+ faster. |
+| **App Startup Hangs** | ❌ Frequently hangs on a blank screen or fails to open on macOS. | ✅ **Async Boot & Gatekeeper Bypass** | Completely rebuilt startup loop to ensure the app opens instantly on double-click. |
+| **Micro-Stutters** | ❌ Suffers from tiny freezes (garbage collection pauses) during fights. | ✅ **Zero-Allocation Game Loop** | Re-engineered scheduler uses zero-overhead memory queues, eliminating micro-stutters during combat. |
+| **Input Lag** | ❌ Standard browser rendering pipeline latency. | ✅ **WebGL Direct-Draw & Metal Zero-Copy** | Bypasses layout compositor delay, drawing frames directly to screen. 8-16ms faster time-to-first-shot. |
+
+---
+
+## 🎨 Core Dawn Features
+All base features you love are still fully supported:
+- **Resource Swapper**: Swap your skins, sounds, crosshairs, and textures. Just open the swapper folder in settings.
+- **Discord Rich Presence**: Show your friends when you are in the lobby or dominating in a match.
+- **Auto Opener**: Instantly open packs and chests with one click.
+- **Custom CSS / Themes**: Customize the UI look with custom CSS stylesheets.
+- **Userscript / Adblock support**: Run your favorite scripts and block background ads.
+
+---
 
 ## ⌨️ Hotkeys
-| Hotkey | Description |
-| ------ | ----------- |
-| **F2** | Take screenshot and copy to clipboard |
-| **F4** | Return to https://kirka.io |
-| **F5** | Reload client |
-| **F6** | Load URL |
-| **F7** | Copy current URL |
-| **F11**| Toggle Fullscreen |
-| **F12 / Ctrl+Shift+I** | Open Developer Tools |
+
+| Hotkey | Action |
+| ------ | ------ |
+| **Shift (Right)** | Open Client Settings Menu |
+| **F2** | Take Screenshot (Saves and copies to clipboard) |
+| **F4** | Return to Lobby / Home |
+| **F5** | Reload Game Client |
+| **F6** | Load Custom URL |
+| **F7** | Copy Current URL |
+| **F11** | Toggle Fullscreen |
+| **F12** | Toggle Developer Tools |
 
 ---
 
-## 🛠️ Build & Installation
+## 🛠️ Build and Install
 
-### Prerequites
-Ensure you have [Node.js](https://nodejs.org) installed on your system.
+### Prerequisites
+Make sure you have [Node.js](https://nodejs.org) installed on your system.
 
-### Build Executable (DMG / EXE)
-To compile the production distribution package:
+### Build instructions
+To build the application for your operating system:
 ```bash
 # Install dependencies
 npm install
 
-# Build the client DMG (macOS) or setup executable (Windows)
+# Compile the production installer (DMG for macOS, EXE for Windows)
 npm run build
 ```
-The compiled binaries will be outputted to the `build/` directory.
-
----
-
-## Credits
-* **zVipexx** (Base Dawn Client)
-* **irrvlo** (Juice Client concept)
-* **AwesomeSam** (Resource Swapper)
-* **Cheeseburger** (Auto Opener)
-* **Error430** & **robertpakalns** (Base tweaks)
+The finished package will be saved in the `build/` folder.

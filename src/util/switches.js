@@ -33,6 +33,9 @@ function applySwitches(settings) {
     // Tell Chromium there are 4 GB of GPU memory available — prevents fallback
     // to software paths when the GPU memory budget heuristic is hit
     app.commandLine.appendSwitch("force-gpu-mem-available-mb", "4096");
+    // Map textures directly to GPU buffers, eliminating double-copy overhead and laptop heat
+    app.commandLine.appendSwitch("enable-gpu-memory-buffer-compositor-resources");
+    app.commandLine.appendSwitch("enable-gpu-memory-buffer-video-frames");
   }
 
   // ─── Prevent background throttling, App Nap, or occlusion-based CPU cuts ─────
@@ -76,6 +79,10 @@ function applySwitches(settings) {
   app.commandLine.appendSwitch("no-default-browser-check");
   // Async DNS resolver: resolves hostnames off the main thread (prevents DNS stall spikes)
   app.commandLine.appendSwitch("enable-async-dns");
+  // TCP Fast Open: allows sending data on initial handshake, reducing WS handshake RTT
+  app.commandLine.appendSwitch("enable-tcp-fast-open");
+  // Disable low-end device mode to prevent Chromium from throttling rendering threads
+  app.commandLine.appendSwitch("disable-low-end-device-mode");
 
   // ─── Low-Latency WebGL & Graphics Compositing ────────────────────────────────
   app.commandLine.appendSwitch("enable-webgl-image-chromium");
